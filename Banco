@@ -1,1 +1,311 @@
+CREATE TABLE marca (
+    marca_id SERIAL PRIMARY KEY,
+    nome VARCHAR(50) NOT NULL
+);
+
+
+CREATE TABLE categoria (
+    categoria_id SERIAL PRIMARY KEY,
+    nome VARCHAR(50) NOT NULL
+);
+
+
+CREATE TABLE produto (
+    produto_id SERIAL PRIMARY KEY,
+    nome VARCHAR(50) NOT NULL,
+    marca INT NOT NULL,
+    categoria INT NOT NULL,
+    FOREIGN KEY (marca) REFERENCES marca(marca_id),
+    FOREIGN KEY (categoria) REFERENCES categoria(categoria_id)
+);
+
+
+CREATE TABLE medico (
+    medico_id SERIAL PRIMARY KEY,
+    crm VARCHAR(10) NOT NULL,
+    nome VARCHAR(50) NOT NULL
+);
+
+
+CREATE TABLE receita (
+    receita_id SERIAL PRIMARY KEY,
+    link VARCHAR(50) NOT NULL,
+    medico INT NOT NULL,
+    FOREIGN KEY (medico) REFERENCES medico(medico_id)
+);
+
+CREATE TABLE estoque (
+    estoque_id SERIAL PRIMARY KEY,
+    loja_id INT NOT NULL,
+    produto INT NOT NULL,
+    preco DECIMAL(10,2) NOT NULL,
+    quantidade INT NOT NULL,
+    FOREIGN KEY (produto) REFERENCES produto(produto_id)
+);
+
+
+CREATE TABLE fornecedor(
+    fornecedor_id SERIAL PRIMARY KEY,
+    nome VARCHAR(50)
+);
+
+-- Preço com o fornecedor
+
+CREATE TABLE preco (
+    fornecedor INT NOT NULL,
+    produto INT NOT NULL,
+    valor DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY(fornecedor) REFERENCES fornecedor(fornecedor_id),
+    FOREIGN KEY(produto) REFERENCES produto(produto_id),
+    CONSTRAINT preco_id PRIMARY KEY(produto, fornecedor)
+);
+
+-- Compras feitas com o fornecedor
+
+CREATE TABLE compra (
+    compra_id SERIAL PRIMARY KEY,
+    fornecedor INT NOT NULL,
+    valor_total DECIMAL(10,2),
+    hora_data TIMESTAMP NOT NULL,
+    FOREIGN KEY(fornecedor) REFERENCES fornecedor(fornecedor_id)
+);
+
+-- O que foi comprado com o fornecedor, quantidade e valor.
+
+CREATE TABLE item_compra (
+    item_compra_id SERIAL PRIMARY KEY,
+    compra_id INT NOT NULL,
+    estoque_id INT NOT NULL,
+    quantidade INT NOT NULL,
+    valor DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY(compra_id) REFERENCES compra(compra_id),
+    FOREIGN KEY(estoque_id) REFERENCES estoque(estoque_id)
+);
+
+-- Venda que foi feita, sem descrição de produtos, apenas valor total.
+
+CREATE TABLE venda (
+    venda_id SERIAL PRIMARY KEY,
+    hora_data TIMESTAMP NOT NULL,
+    valor_total DECIMAL(10,2),
+    FOREIGN KEY(bairro) REFERENCES bairro(bairro_id)
+);
+
+-- Tabela de Venda com Receita
+
+CREATE TABLE venda_receita (
+    venda_receita_id SERIAL PRIMARY KEY,
+    venda INT NOT NULL,
+    receita INT,
+    FOREIGN KEY(venda) REFERENCES VENDA(venda_id),
+    FOREIGN KEY(receita) REFERENCES receita(receita_id)
+);
+
+-- Já aqui há a descrição do que foi vendido, contendo quantidade e afins
+
+CREATE TABLE item_venda (
+    item_venda_id SERIAL PRIMARY KEY,
+    venda INT NOT NULL,
+    estoque INT NOT NULL,
+    quantidade INT NOT NULL,
+    valor DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY(venda) REFERENCES venda(venda_id),
+    FOREIGN KEY(estoque) REFERENCES estoque(estoque_id)
+);
+
+-- Inserções de categorias
+INSERT INTO categoria VALUES
+(default, 'PRETA'),
+(default, 'VERMELHA'),
+(default, 'SEM TARJA');
+
+-- Inserções de fornecedores
+INSERT INTO fornecedor VALUES
+(default, 'PharmaVital'),
+(default, 'BioFarma'),
+(default, 'Saude Plus'),
+(default, 'MediSupreme'),
+(default, 'Vita Farma');
+
+-- Inserções de marcas
+INSERT INTO marca VALUES
+(default, 'Neo Química'),
+(default, 'Cimed'),
+(default, 'Medley'),
+(default, 'Legrand'),
+(default, 'Genérico');
+
+-- Inserções de produtos
+INSERT INTO produto VALUES
+(default, 'Prednisolona ', 1, 2),
+(default, 'Dipirona', 2, 3),
+(default, 'Rivotril', 3, 1),
+(default, 'Psicotril', 4, 1),
+(default, 'Amoxilina', 5, 2);
+
+-- Inserções de preços
+INSERT INTO preco VALUES
+(1, 1, 10.00), (2, 1, 12.00), (3, 1, 11.50), (4, 1, 19.60), (5, 1, 10.00),
+(1, 2, 20.00), (2, 2, 22.00), (3, 2, 21.50), (4, 2, 29.60), (5, 2, 20.00),
+(1, 3, 60.00), (2, 3, 62.00), (3, 3, 61.50), (4, 3, 59.60), (5, 3, 60.00),
+(1, 4, 40.00), (2, 4, 42.00), (3, 4, 41.50), (4, 4, 39.60), (5, 4, 40.00),
+(1, 5, 25.00), (2, 5, 23.00), (3, 5, 26.00), (4, 5, 28.00), (5, 5, 26.00),
+(1, 6, 15.00), (2, 6, 11.00), (3, 6, 16.00), (4, 6, 12.00), (5, 6, 13.00);
+
+-- Funções
+
+CREATE OR REPLACE FUNCTION VERIFICAR_ESTOQUE(PRODUTO_ID INT) 
+RETURNS INTEGER AS $$
+DECLARE
+    QUANTIDADE_ESTOQUE INT;
+BEGIN
+    SELECT quantidade INTO QUANTIDADE_ESTOQUE
+    FROM estoque
+    WHERE produto = PRODUTO_ID;
+
+    RETURN COALESCE(QUANTIDADE_ESTOQUE, 0);
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION VERIFICAR_RECEITA(VENDA_ID INT) 
+RETURNS BOOLEAN AS $$
+DECLARE
+    RECEITA_EXISTE BOOLEAN;
+BEGIN
+    SELECT EXISTS(SELECT 1 FROM venda_receita WHERE venda = VENDA_ID) INTO RECEITA_EXISTE;
+    RETURN RECEITA_EXISTE;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION CALCULAR_VALOR_COMPRAS_FORNECEDOR(FORNECEDOR_ID INT) 
+RETURNS DECIMAL(10,2) AS $$
+DECLARE
+    TOTAL_COMPRAS DECIMAL(10,2);
+BEGIN
+    SELECT SUM(valor_total) INTO TOTAL_COMPRAS
+    FROM compra
+    WHERE fornecedor = FORNECEDOR_ID;
+
+    RETURN COALESCE(TOTAL_COMPRAS, 0);
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION BUSCAR_PRECO_PRODUTO(FORNECEDOR_ID INT, PRODUTO_ID INT) 
+RETURNS DECIMAL(10,2) AS $$
+DECLARE
+    PRECO_PRODUTO DECIMAL(10,2);
+BEGIN
+    SELECT valor INTO PRECO_PRODUTO
+    FROM preco
+    WHERE fornecedor = FORNECEDOR_ID AND produto = PRODUTO_ID;
+
+    RETURN COALESCE(PRECO_PRODUTO, 0);
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION REGISTRAR_VENDA(
+    CLIENTE_ID INT, 
+    ITENS_VENDA JSONB
+) 
+RETURNS VOID AS $$
+DECLARE
+    VENDA_ID INT;
+    ITEM JSONB;
+    PRODUTO_ID INT;
+    QUANTIDADE INT;
+    PRECO DECIMAL(10,2);
+    QUANTIDADE_ESTOQUE INT;
+    TOTAL_VENDA DECIMAL(10,2) := 0;
+    ESTOQUE_ID INT;
+BEGIN
+    -- Registrar a venda
+    INSERT INTO venda (cliente, hora_data, valor_total)
+    VALUES (CLIENTE_ID, CURRENT_TIMESTAMP, 0)
+    RETURNING venda_id INTO VENDA_ID;
+
+    -- Iterar pelos itens da venda
+    FOR ITEM IN SELECT * FROM jsonb_array_elements(ITENS_VENDA)
+    LOOP
+        PRODUTO_ID := (ITEM->>'produto_id')::INT;
+        QUANTIDADE := (ITEM->>'quantidade')::INT;
+
+        -- Verificar quantidade em estoque
+        SELECT quantidade, estoque_id, preco INTO QUANTIDADE_ESTOQUE, ESTOQUE_ID, PRECO
+        FROM estoque
+        WHERE produto = PRODUTO_ID
+        LIMIT 1;
+
+        IF QUANTIDADE_ESTOQUE < QUANTIDADE THEN
+            RAISE EXCEPTION 'Estoque insuficiente para o produto %', PRODUTO_ID;
+        END IF;
+
+        -- Atualizar o estoque
+        UPDATE estoque
+        SET quantidade = quantidade - QUANTIDADE
+        WHERE estoque_id = ESTOQUE_ID;
+
+        -- Registrar item da venda
+        INSERT INTO item_venda (venda, estoque, quantidade, valor)
+        VALUES (VENDA_ID, ESTOQUE_ID, QUANTIDADE, PRECO);
+
+        -- Calcular valor total da venda
+        TOTAL_VENDA := TOTAL_VENDA + (PRECO * QUANTIDADE);
+    END LOOP;
+
+
+CREATE OR REPLACE FUNCTION ADICIONAR_ESTOQUE(
+    PRODUTO_NOME VARCHAR(50),
+    QUANTIDADE_COMPRADA INT,
+    PRECO_COMPRA DECIMAL(10,2),
+    FORNECEDOR_ID INT
+)
+RETURNS VOID AS $$
+DECLARE
+    PRODUTO_ID INT;
+    ESTOQUE_ID INT;
+    QUANTIDADE_ATUAL INT;
+BEGIN
+    -- Buscar o produto pelo nome
+    SELECT produto_id INTO PRODUTO_ID
+    FROM produto
+    WHERE nome ILIKE '%' || PRODUTO_NOME || '%';
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Produto não encontrado: %', PRODUTO_NOME;
+    END IF;
+
+    -- Verificar se o produto já está no estoque
+    SELECT estoque_id, quantidade INTO ESTOQUE_ID, QUANTIDADE_ATUAL
+    FROM estoque
+    WHERE produto = PRODUTO_ID
+    LIMIT 1;
+
+    IF FOUND THEN
+        -- Se o produto já existe no estoque, atualizar a quantidade
+        UPDATE estoque
+        SET quantidade = quantidade + QUANTIDADE_COMPRADA,
+            preco = PRECO_COMPRA
+        WHERE estoque_id = ESTOQUE_ID;
+    ELSE
+        -- Se o produto não está no estoque, inserir um novo registro
+        INSERT INTO estoque (produto, preco, quantidade)
+        VALUES (PRODUTO_ID, PRECO_COMPRA, QUANTIDADE_COMPRADA);
+    END IF;
+
+    -- Registrar a compra no histórico de compras
+    INSERT INTO compra (fornecedor, valor_total, hora_data)
+    VALUES (FORNECEDOR_ID, PRECO_COMPRA * QUANTIDADE_COMPRADA, CURRENT_TIMESTAMP)
+    RETURNING compra_id INTO ESTOQUE_ID;
+
+    -- Registrar os itens comprados
+    INSERT INTO item_compra (compra_id, estoque_id, quantidade, valor)
+    VALUES (ESTOQUE_ID, ESTOQUE_ID, QUANTIDADE_COMPRADA, PRECO_COMPRA);
+END;
+$$ LANGUAGE plpgsql;
+
+
 
